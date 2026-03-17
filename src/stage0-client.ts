@@ -158,16 +158,19 @@ export class Stage0Client {
       sideEffects?: string[];
       tools?: string[];
       constraints?: string[];
+      successCriteria?: string[];
       context?: Stage0Context;
+      pro?: boolean;
     }
   ): Promise<PolicyResponse> {
     return this.check({
       goal,
-      success_criteria: [],
+      success_criteria: options?.successCriteria || [],
       constraints: options?.constraints || [],
       tools: options?.tools || [],
       side_effects: options?.sideEffects || [],
       context: options?.context,
+      pro: options?.pro || false,
     });
   }
 
@@ -240,17 +243,17 @@ export class Stage0Client {
   private simulateResponse(intent: ExecutionIntent): PolicyResponse {
     const requestId = crypto.randomUUID();
     const sideEffects = intent.side_effects || [];
-
-    const retryCount = intent.context?.retry_count || 0;
+    const successCriteria = intent.success_criteria || [];
+    const goal = intent.goal || '';
     
     if (sideEffects.includes('publish') || sideEffects.includes('deploy')) {
       return {
         verdict: 'DENY',
         decision: 'NO_GO',
-        reason: `HIGH severity: SIDE_EFFECTS_NEED_GUARDRAILS - '${sideEffects.join(', ')}' side effect requires approval guardrails`,
+        reason: `SIDE_EFFECTS_NEED_GUARDRAILS: External/irreversible side effects declared without machine-readable guardrails in constraints.`,
         request_id: requestId,
         policy_version: 'simulated-v1.0.0',
-        risk_score: 85,
+        risk_score: 64,
         high_risk: true,
         issues: [
           {
@@ -258,22 +261,59 @@ export class Stage0Client {
             severity: 'HIGH',
             message: `Side effects [${sideEffects.join(', ')}] require approval guardrails`,
           },
+          {
+            code: 'CUSTOMER_VISIBLE_APPROVAL_REQUIRED',
+            severity: 'LOW',
+            message: 'Customer-visible side effects require explicit approval before execution',
+          },
         ],
       };
     }
 
-    if (retryCount > 3) {
+    const isVagueGoal = goal.length < 10 || 
+      goal.includes('幫我') || 
+      goal.includes('想一下') ||
+      goal.toLowerCase().includes('help me') ||
+      goal.toLowerCase().includes('think');
+
+    if (isVagueGoal) {
       return {
         verdict: 'DEFER',
         decision: 'DEFER',
-        reason: `Loop threshold reached (${retryCount} retries): human confirmation required before extending retry budget`,
+        reason: `UNCLEAR_VALUE_SIGNAL: Task appears under-specified for reliable value delivery.`,
         request_id: requestId,
         policy_version: 'simulated-v1.0.0',
-        risk_score: 60,
+        risk_score: 35,
         high_risk: false,
-        defer_questions: [
-          'Should the agent continue with additional retries?',
-          'Is this workflow within the expected retry budget?',
+        issues: [
+          {
+            code: 'UNCLEAR_VALUE_SIGNAL',
+            severity: 'MEDIUM',
+            message: 'Task scope/goal quality suggests low expected value at current definition',
+          },
+        ],
+        clarifying_questions: [
+          'What is the specific outcome you want to achieve?',
+          'What constraints or requirements should be considered?',
+        ],
+      };
+    }
+
+    if (successCriteria.length === 0) {
+      return {
+        verdict: 'DENY',
+        decision: 'NO_GO',
+        reason: `MISSING_SUCCESS_CRITERIA: Provide at least one success criterion.`,
+        request_id: requestId,
+        policy_version: 'simulated-v1.0.0',
+        risk_score: 59,
+        high_risk: false,
+        issues: [
+          {
+            code: 'MISSING_SUCCESS_CRITERIA',
+            severity: 'HIGH',
+            message: 'Provide at least one success criterion',
+          },
         ],
       };
     }

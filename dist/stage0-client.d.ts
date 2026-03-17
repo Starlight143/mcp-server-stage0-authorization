@@ -86,7 +86,9 @@ export declare class Stage0Client {
         sideEffects?: string[];
         tools?: string[];
         constraints?: string[];
+        successCriteria?: string[];
         context?: Stage0Context;
+        pro?: boolean;
     }): Promise<PolicyResponse>;
     private parseResponse;
     private parseVerdict;

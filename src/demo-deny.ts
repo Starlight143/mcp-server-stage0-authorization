@@ -18,8 +18,13 @@ async function main() {
   const response = await client.checkGoal(
     'Publish security policy update to public documentation',
     {
-      sideEffects: ['publish'],
-      tools: ['shell', 'git'],
+      sideEffects: ['publish', 'external_notification'],
+      tools: ['shell', 'git', 'api_call'],
+      successCriteria: [
+        'Content published to target channel',
+        'Notification sent to subscribers',
+      ],
+      constraints: [],
     }
   );
 

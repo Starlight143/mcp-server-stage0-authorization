@@ -19,6 +19,15 @@ async function main() {
     {
       sideEffects: [],
       tools: ['web_search', 'read_file'],
+      successCriteria: [
+        'Summary includes at least 3 frameworks',
+        'Output is under 500 words',
+        'No external side effects',
+      ],
+      constraints: [
+        'read-only',
+        'sandbox',
+      ],
     }
   );
 
@@ -40,17 +49,17 @@ async function main() {
     console.log('The agent can proceed to execute the research tool.');
     console.log('This is safe because:');
     console.log('- No side effects (publish, deploy, etc.)');
-    console.log('- Informational operation only');
-    console.log('- No guardrail violations');
+    console.log('- Clear success criteria defined');
+    console.log('- Read-only constraints applied');
   } else {
     console.log('❌ UNEXPECTED: This should have been ALLOWED');
+    console.log('Check if API key is configured correctly.');
   }
 
   console.log();
   console.log('='.repeat(70));
-  console.log('Key Takeaway: Informational operations are ALLOWED');
-  console.log('Stage0 allows safe, bounded assistance without blocking');
-  console.log('legitimate research and analysis tasks.');
+  console.log('Key Takeaway: Informational operations with clear criteria');
+  console.log('and constraints are ALLOWED by Stage0.');
   console.log('='.repeat(70));
 }
 

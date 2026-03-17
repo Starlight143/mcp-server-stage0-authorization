@@ -1,22 +1,23 @@
 import { Stage0Client } from './stage0-client.js';
 async function main() {
     console.log('='.repeat(70));
-    console.log('DEMO: DEFER Scenario - Loop/Retry Threshold');
+    console.log('DEMO: DEFER Scenario - Unclear/Vague Request');
     console.log('='.repeat(70));
     console.log();
-    console.log('Scenario: An agent has retried a failing workflow multiple times');
-    console.log('and wants to continue. Stage0 DEFERs to require human review.');
+    console.log('Scenario: An agent receives a vague request without clear');
+    console.log('success criteria or value proposition. Stage0 DEFERs to');
+    console.log('request more context before proceeding.');
     console.log();
     const client = new Stage0Client();
     console.log('Calling Stage0 to check authorization...');
     console.log();
-    const response = await client.checkGoal('Continue retrying the failing support workflow', {
-        sideEffects: ['loop'],
-        tools: ['shell', 'api_call'],
-        context: {
-            run_id: 'support-workflow-2024-01-15-01',
-            retry_count: 5,
-        },
+    const response = await client.checkGoal('幫我想一下', {
+        sideEffects: [],
+        tools: [],
+        successCriteria: [
+            '有結果',
+        ],
+        constraints: [],
     });
     console.log('Response from Stage0:');
     console.log('-'.repeat(70));
@@ -33,6 +34,13 @@ async function main() {
             console.log(`  ? ${question}`);
         }
     }
+    if (response.clarifying_questions && response.clarifying_questions.length > 0) {
+        console.log();
+        console.log('Clarifying questions:');
+        for (const question of response.clarifying_questions) {
+            console.log(`  ? ${question}`);
+        }
+    }
     console.log('-'.repeat(70));
     console.log();
     if (response.verdict === 'DEFER') {
@@ -40,18 +48,30 @@ async function main() {
         console.log();
         console.log('The agent should NOT proceed automatically.');
         console.log('Human review is required because:');
-        console.log('- Loop threshold exceeded (5 retries)');
-        console.log('- Continuing could waste resources or amplify issues');
-        console.log('- A human checkpoint is safer than silent continuation');
+        console.log('- Request is too vague to evaluate value');
+        console.log('- Success criteria are unclear');
+        console.log('- More context is needed before execution');
+    }
+    else if (response.verdict === 'DENY') {
+        console.log('⛔ TOOL CALL BLOCKED');
+        console.log();
+        console.log('The request was too vague to approve.');
+        console.log('Stage0 requires clearer goals and success criteria.');
+        console.log();
+        console.log('This demonstrates that unclear requests are not');
+        console.log('blindly approved - they need proper specification.');
     }
     else {
-        console.log('❌ UNEXPECTED: This should have been DEFERRED');
+        console.log('✅ TOOL CALL ALLOWED');
+        console.log();
+        console.log('Note: Without API key, simulated response allows this.');
+        console.log('Real API would likely DEFER or DENY vague requests.');
     }
     console.log();
     console.log('='.repeat(70));
-    console.log('Key Takeaway: Loop-like behavior triggers DEFER');
-    console.log('Stage0 catches runaway retries and requires human');
-    console.log('intervention before the agent can continue unattended.');
+    console.log('Key Takeaway: Vague or unclear requests trigger DEFER/DENY');
+    console.log('Stage0 requires clear goals, success criteria, and context');
+    console.log('to provide meaningful authorization decisions.');
     console.log('='.repeat(70));
 }
 main().catch(console.error);

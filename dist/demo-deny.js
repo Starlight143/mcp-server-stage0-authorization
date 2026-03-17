@@ -12,8 +12,13 @@ async function main() {
     console.log('Calling Stage0 to check authorization...');
     console.log();
     const response = await client.checkGoal('Publish security policy update to public documentation', {
-        sideEffects: ['publish'],
-        tools: ['shell', 'git'],
+        sideEffects: ['publish', 'external_notification'],
+        tools: ['shell', 'git', 'api_call'],
+        successCriteria: [
+            'Content published to target channel',
+            'Notification sent to subscribers',
+        ],
+        constraints: [],
     });
     console.log('Response from Stage0:');
     console.log('-'.repeat(70));

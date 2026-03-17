@@ -159,15 +159,16 @@ This is correct because:
 - Publishing without review can cause trust/compliance issues
 ```
 
-### DEFER Example (Loop)
+### DEFER Example (Vague Request)
 
 ```
 ======================================================================
-DEMO: DEFER Scenario - Loop/Retry Threshold
+DEMO: DEFER Scenario - Unclear/Vague Request
 ======================================================================
 
-Scenario: An agent has retried a failing workflow multiple times
-and wants to continue. Stage0 DEFERs to require human review.
+Scenario: An agent receives a vague request without clear
+success criteria or value proposition. Stage0 DEFERs to
+request more context before proceeding.
 
 Calling Stage0 to check authorization...
 
@@ -175,25 +176,30 @@ Response from Stage0:
 ----------------------------------------------------------------------
 Verdict:        DEFER
 Decision:       DEFER
-Reason:         Loop threshold reached (5 retries): human confirmation
-                required before extending retry budget
+Reason:         UNCLEAR_VALUE_SIGNAL: Task appears under-specified 
+                for reliable value delivery.
 Request ID:     c3d4e5f6-a7b8-9012-cdef-123456789012
 Policy Version: simulated-v1.0.0
-Risk Score:     60
+Risk Score:     35
 
-Questions for human review:
-  ? Should the agent continue with additional retries?
-  ? Is this workflow within the expected retry budget?
+Clarifying questions:
+  ? What is the specific outcome you want to achieve?
+  ? What constraints or requirements should be considered?
 ----------------------------------------------------------------------
 
 ⏸️ TOOL CALL DEFERRED
 
 The agent should NOT proceed automatically.
 Human review is required because:
-- Loop threshold exceeded (5 retries)
-- Continuing could waste resources or amplify issues
-- A human checkpoint is safer than silent continuation
+- Request is too vague to evaluate value
+- Success criteria are unclear
+- More context is needed before execution
 ```
+
+**Note**: The actual verdict depends on your Stage0 plan and policy configuration:
+- **Pro plans** may return `DEFER` for vague requests with `clarifying_questions`
+- **Free/Starter plans** may return `ALLOW` with clarifying questions or `DENY` depending on policy settings
+- The simulated response (without API key) demonstrates the expected `DEFER` behavior
 
 ## Where `request_id` and `policy_version` Appear
 
