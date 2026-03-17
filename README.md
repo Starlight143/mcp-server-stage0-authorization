@@ -326,9 +326,9 @@ server.tool('my-tool', 'Description', schema, async (params) => {
 
 This example is part of the SignalPulse framework quickstart collection:
 
-- **OpenAI Agents SDK** - `example/openai-agents-stage0`
-- **LangGraph** - `example/langgraph-stage0`
-- **MCP Server** - `example/mcp-server-stage0-authorization` (this repo)
+- **OpenAI Agents SDK** - [github.com/Starlight143/openai-agents-stage0](https://github.com/Starlight143/openai-agents-stage0)
+- **LangGraph** - [github.com/Starlight143/langgraph-stage0](https://github.com/Starlight143/langgraph-stage0)
+- **MCP Server** - [github.com/Starlight143/mcp-server-stage0-authorization](https://github.com/Starlight143/mcp-server-stage0-authorization) (this repo)
 
 ## License
 
