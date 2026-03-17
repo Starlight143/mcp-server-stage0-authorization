@@ -16,9 +16,20 @@ const guardedToolHandler = async (
   goal: string,
   sideEffects: string[],
   handler: () => Promise<string>,
-  context?: Stage0Context
+  context?: Stage0Context,
+  options?: {
+    successCriteria?: string[];
+    constraints?: string[];
+    tools?: string[];
+  }
 ) => {
-  const response = await stage0.checkGoal(goal, { sideEffects, context });
+  const response = await stage0.checkGoal(goal, { 
+    sideEffects, 
+    context,
+    successCriteria: options?.successCriteria || [],
+    constraints: options?.constraints || [],
+    tools: options?.tools || [],
+  });
 
   console.error('\n=== Stage0 Authorization ===');
   console.error(`Tool: ${toolName}`);
@@ -78,6 +89,15 @@ server.tool(
       async () => {
         await new Promise((resolve) => setTimeout(resolve, 100));
         return `Research Summary: ${topic}\n\nThis is an informational summary about ${topic}.\n\nKey findings:\n- Point 1: Overview of the topic\n- Point 2: Key considerations\n- Point 3: Common approaches\n\nThis research is for informational purposes only.`;
+      },
+      undefined,
+      {
+        successCriteria: [
+          'Summary is accurate and relevant',
+          'No external side effects',
+        ],
+        constraints: ['read-only'],
+        tools: ['web_search', 'read_file'],
       }
     );
   }
@@ -97,6 +117,13 @@ server.tool(
       ['publish'],
       async () => {
         return `Content published to ${channel}:\n\n${content.substring(0, 200)}...`;
+      },
+      undefined,
+      {
+        successCriteria: [
+          'Content published successfully',
+        ],
+        tools: ['shell', 'git'],
       }
     );
   }
@@ -117,6 +144,13 @@ server.tool(
       ['deploy'],
       async () => {
         return `Deployment initiated:\n- Service: ${serviceName}\n- Environment: ${environment}\n- Changes: ${changes}`;
+      },
+      undefined,
+      {
+        successCriteria: [
+          'Deployment completes successfully',
+        ],
+        tools: ['shell', 'kubectl'],
       }
     );
   }
@@ -140,6 +174,15 @@ server.tool(
       {
         run_id: workflowId,
         retry_count: retryCount,
+      },
+      {
+        successCriteria: [
+          'Workflow completes successfully',
+        ],
+        constraints: [
+          'max_retries: 5',
+        ],
+        tools: ['shell', 'api_call'],
       }
     );
   }
@@ -151,11 +194,13 @@ server.tool(
   {
     goal: z.string().describe('The goal/action to check'),
     sideEffects: z.array(z.string()).describe('List of side effects (e.g., "publish", "deploy", "loop")'),
+    successCriteria: z.array(z.string()).optional().describe('List of success criteria'),
     retryCount: z.number().optional().describe('Current retry count (for loop scenarios)'),
   },
-  async ({ goal, sideEffects, retryCount }) => {
+  async ({ goal, sideEffects, successCriteria, retryCount }) => {
     const response = await stage0.checkGoal(goal, { 
       sideEffects,
+      successCriteria: successCriteria || ['Task completes successfully'],
       context: retryCount !== undefined ? { retry_count: retryCount } : undefined,
     });
 
@@ -172,7 +217,7 @@ server.tool(
       content: [
         {
           type: 'text' as const,
-          text: `${status}\n\nGoal: ${goal}\nSide Effects: ${sideEffects.join(', ') || 'None'}${retryCount !== undefined ? `\nRetry Count: ${retryCount}` : ''}\n\nDecision: ${response.decision}\nReason: ${response.reason}\n\nRequest ID: ${response.request_id}\nPolicy Version: ${response.policy_version}\nRisk Score: ${response.risk_score}\nHigh Risk: ${response.high_risk}`,
+          text: `${status}\n\nGoal: ${goal}\nSide Effects: ${sideEffects.join(', ') || 'None'}${successCriteria ? `\nSuccess Criteria: ${successCriteria.join(', ')}` : ''}${retryCount !== undefined ? `\nRetry Count: ${retryCount}` : ''}\n\nDecision: ${response.decision}\nReason: ${response.reason}\n\nRequest ID: ${response.request_id}\nPolicy Version: ${response.policy_version}\nRisk Score: ${response.risk_score}\nHigh Risk: ${response.high_risk}`,
         },
       ],
     };

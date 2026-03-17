@@ -284,6 +284,11 @@ server.tool('my-tool', 'Description', schema, async (params) => {
     'Description of what this tool does',
     {
       sideEffects: ['publish'], // or ['deploy'], ['loop'], etc.
+      successCriteria: [         // Required for proper evaluation
+        'Task completes successfully',
+        'No data corruption',
+      ],
+      constraints: ['read-only'], // Optional constraints
     }
   );
 
