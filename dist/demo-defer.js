@@ -51,6 +51,8 @@ async function main() {
         console.log('- Request is too vague to evaluate value');
         console.log('- Success criteria are unclear');
         console.log('- More context is needed before execution');
+        console.log();
+        console.log('Note: DEFER verdict requires Pro plan.');
     }
     else if (response.verdict === 'DENY') {
         console.log('⛔ TOOL CALL BLOCKED');
@@ -64,8 +66,19 @@ async function main() {
     else {
         console.log('✅ TOOL CALL ALLOWED');
         console.log();
-        console.log('Note: Without API key, simulated response allows this.');
-        console.log('Real API would likely DEFER or DENY vague requests.');
+        if (response.clarifying_questions && response.clarifying_questions.length > 0) {
+            console.log('The API returned ALLOW with clarifying questions.');
+            console.log('This happens on Free/Starter plans where DEFER is not available.');
+            console.log();
+            console.log('The agent should still ask the user these questions before proceeding:');
+            for (const question of response.clarifying_questions) {
+                console.log(`  ? ${question}`);
+            }
+        }
+        else {
+            console.log('The request was allowed. This might happen on Free/Starter plans');
+            console.log('where DEFER is not available, or with well-specified requests.');
+        }
     }
     console.log();
     console.log('='.repeat(70));

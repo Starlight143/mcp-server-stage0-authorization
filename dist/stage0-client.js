@@ -148,6 +148,33 @@ export class Stage0Client {
         const sideEffects = intent.side_effects || [];
         const successCriteria = intent.success_criteria || [];
         const goal = intent.goal || '';
+        // Handle loop side effects (retry scenarios)
+        if (sideEffects.includes('loop')) {
+            const retryCount = intent.context?.retry_count || 0;
+            const maxRetries = 5; // Default threshold
+            if (retryCount >= maxRetries) {
+                return {
+                    verdict: 'DEFER',
+                    decision: 'DEFER',
+                    reason: `LOOP_THRESHOLD_EXCEEDED: Retry count (${retryCount}) exceeds maximum allowed (${maxRetries}). Consider alternative approaches or human review.`,
+                    request_id: requestId,
+                    policy_version: 'simulated-v1.0.0',
+                    risk_score: 45,
+                    high_risk: false,
+                    issues: [
+                        {
+                            code: 'LOOP_THRESHOLD_EXCEEDED',
+                            severity: 'MEDIUM',
+                            message: `Retry count ${retryCount} exceeds threshold of ${maxRetries}`,
+                        },
+                    ],
+                    defer_questions: [
+                        'Should we continue retrying or try a different approach?',
+                        'Is there a root cause that needs to be addressed first?',
+                    ],
+                };
+            }
+        }
         if (sideEffects.includes('publish') || sideEffects.includes('deploy')) {
             return {
                 verdict: 'DENY',
