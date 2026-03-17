@@ -49,8 +49,9 @@ AI agents can silently escalate from safe operations into dangerous ones:
 ### Installation
 
 ```bash
-# Navigate to the example directory
-cd example/mcp-server-stage0-authorization
+# Clone the repository
+git clone https://github.com/Starlight143/mcp-server-stage0-authorization.git
+cd mcp-server-stage0-authorization
 
 # Install dependencies
 npm install
@@ -229,14 +230,18 @@ npm run build
 
 ### 2. Add to Claude Desktop config
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or equivalent:
+Edit the Claude Desktop config file:
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
 
 ```json
 {
   "mcpServers": {
     "stage0-authorization": {
       "command": "node",
-      "args": ["/path/to/mcp-server-stage0-authorization/dist/index.js"],
+      "args": ["<REPO_PATH>/dist/index.js"],
       "env": {
         "STAGE0_API_KEY": "your_api_key_here",
         "STAGE0_BASE_URL": "https://api.signalpulse.org"
@@ -245,6 +250,8 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
   }
 }
 ```
+
+Replace `<REPO_PATH>` with the actual path to your cloned repository.
 
 ### 3. Available Tools
 
@@ -316,11 +323,13 @@ server.tool('my-tool', 'Description', schema, async (params) => {
 
 ## Getting an API Key
 
-1. Visit [signalpulse.org](https://signalpulse.org)
+1. Visit [SignalPulse](https://signalpulse.org)
 2. Create an account
 3. Subscribe to a plan
-4. Generate an API key
+4. Generate an API key from [Dashboard > API Keys](https://signalpulse.org/dashboard/settings/api-keys)
 5. Add to `.env` file
+
+For full API documentation, see [signalpulse.org/docs](https://signalpulse.org/docs)
 
 ## Related Examples
 
