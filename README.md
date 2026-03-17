@@ -288,7 +288,7 @@ server.tool('my-tool', 'Description', schema, async (params) => {
         'Task completes successfully',
         'No data corruption',
       ],
-      constraints: ['read-only'], // Optional constraints
+      constraints: ['approval_required', 'dry-run'], // Constraints for high-risk actions
     }
   );
 

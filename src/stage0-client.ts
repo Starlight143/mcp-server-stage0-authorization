@@ -121,10 +121,14 @@ export class Stage0Client {
       const data = await response.json() as Record<string, unknown>;
 
       if (!response.ok) {
+        const errorMsg = (data.message as string) || 
+                         (data.error as string) || 
+                         (data.detail as string) || 
+                         `HTTP ${response.status}`;
         return {
           verdict: 'DENY',
           decision: 'ERROR',
-          reason: (data.detail as string) || `HTTP ${response.status}`,
+          reason: errorMsg,
           request_id: requestId,
           policy_version: '',
         };

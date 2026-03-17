@@ -49,10 +49,14 @@ export class Stage0Client {
             });
             const data = await response.json();
             if (!response.ok) {
+                const errorMsg = data.message ||
+                    data.error ||
+                    data.detail ||
+                    `HTTP ${response.status}`;
                 return {
                     verdict: 'DENY',
                     decision: 'ERROR',
-                    reason: data.detail || `HTTP ${response.status}`,
+                    reason: errorMsg,
                     request_id: requestId,
                     policy_version: '',
                 };
