@@ -38,6 +38,20 @@ AI agents can silently escalate from safe operations into dangerous ones:
 
 **Stage0 sits between tool invocation and execution** - it's NOT part of the agent. The agent cannot self-approve actions. All execution intent MUST be validated via Stage0 `/check` endpoint.
 
+## Why Server-Side Authorization?
+
+A common mistake is to put authorization in the agent's prompt (e.g., "You are not allowed to deploy"). This approach has critical flaws:
+
+| Prompt-Based Authorization | Server-Side Authorization |
+|---------------------------|--------------------------|
+| Agent can ignore instructions | Agent **cannot** bypass server checks |
+| No audit trail of decisions | Every check logged with `request_id` |
+| Different agents = different behaviors | Consistent enforcement across all clients |
+| Can be overridden by user prompts | Enforced by external policy authority |
+| No cryptographic proof of policy | `policy_version` ensures reproducibility |
+
+**The authorization boundary must be in the server-side tool handler**, not in the prompt. This repository demonstrates exactly that pattern.
+
 ## Quick Start
 
 ### Prerequisites
@@ -261,20 +275,59 @@ Replace `<REPO_PATH>` with the actual path to your cloned repository.
 
 ### 3. Available Tools
 
-| Tool | Description | Risk Level | Expected Verdict |
-|------|-------------|------------|------------------|
-| `research-topic` | Research and summarize a topic | Low | ALLOW |
-| `publish-content` | Publish content to a channel | High | DENY |
-| `deploy-changes` | Deploy to environment | High | DENY |
-| `retry-workflow` | Retry a failing workflow | Medium | DEFER (if threshold exceeded) |
-| `check-authorization` | Check if action would be authorized | N/A | Returns verdict |
+| Tool | Description | Risk Level | Context-Aware |
+|------|-------------|------------|---------------|
+| `research-topic` | Research and summarize a topic | Low | No |
+| `publish-content` | Publish content to a channel | High | No |
+| `deploy-changes` | Deploy to environment | High | Yes (`actor_role`) |
+| `managed-deploy` | Deploy with full authorization context | High | Yes (all fields) |
+| `retry-workflow` | Retry a failing workflow | Medium | Yes (`retry_count`) |
+| `check-authorization` | Check if action would be authorized | N/A | Optional |
+
+## Authorization Context
+
+The `managed-deploy` tool demonstrates the four critical context fields that should be passed from upstream:
+
+| Field | Description | Example Values |
+|-------|-------------|----------------|
+| `actor_role` | Role of the entity performing the action | `admin`, `developer`, `viewer` |
+| `approval_status` | Whether the action has been approved | `approved`, `pending`, `none` |
+| `environment` | Target environment | `production`, `staging`, `development` |
+| `resource_scope` | Scope of resources affected | `all`, `team-a`, `service-x` |
+
+### Example: Role-Based Deployment Control
+
+```typescript
+const context: Stage0Context = {
+  actor_role: 'developer',      // Who is performing the action
+  approval_status: 'pending',   // Has this been approved?
+  environment: 'production',    // Where is this deploying?
+  resource_scope: 'team-a',     // What resources are affected?
+};
+
+const response = await stage0.checkGoal(
+  'Deploy authentication service to production',
+  {
+    sideEffects: ['deploy'],
+    context,
+    successCriteria: ['Deployment completes successfully'],
+  }
+);
+```
+
+This context enables policy rules like:
+- `viewer` role → DENY all deployments
+- `developer` role → ALLOW staging, DENY production without approval
+- `admin` role → ALLOW all with `approval_status: approved`
 
 ## Integration Guide
 
 To add Stage0 authorization to your MCP server:
 
+### Basic Pattern
+
 ```typescript
-import { Stage0Client } from './stage0-client.js';
+import { Stage0Client, Stage0Context } from './stage0-client.js';
 
 const stage0 = new Stage0Client();
 
@@ -283,42 +336,69 @@ server.tool('my-tool', 'Description', schema, async (params) => {
   const response = await stage0.checkGoal(
     'Description of what this tool does',
     {
-      sideEffects: ['publish'], // or ['deploy'], ['loop'], etc.
-      successCriteria: [         // Required for proper evaluation
-        'Task completes successfully',
-        'No data corruption',
-      ],
-      constraints: ['approval_required', 'dry-run'], // Constraints for high-risk actions
+      sideEffects: ['publish'],
+      successCriteria: ['Task completes successfully'],
+      constraints: ['approval_required'],
     }
   );
 
   // 2. Handle the verdict
   if (response.verdict === 'DENY') {
     return {
-      content: [{
-        type: 'text',
-        text: `Blocked: ${response.reason}`,
-      }],
+      content: [{ type: 'text', text: `Blocked: ${response.reason}` }],
     };
   }
 
   if (response.verdict === 'DEFER') {
     return {
-      content: [{
-        type: 'text',
-        text: `Deferred: ${response.reason}`,
-      }],
+      content: [{ type: 'text', text: `Deferred: ${response.reason}` }],
     };
   }
 
   // 3. Execute only if ALLOWED
   const result = await doSomething(params);
   return {
-    content: [{
-      type: 'text',
-      text: result,
-    }],
+    content: [{ type: 'text', text: result }],
   };
+});
+```
+
+### With Authorization Context
+
+For privileged operations, pass context from upstream:
+
+```typescript
+server.tool('deploy-service', 'Deploy a service', {
+  serviceName: z.string(),
+  environment: z.enum(['staging', 'production']),
+  actorRole: z.enum(['admin', 'developer', 'viewer']),
+}, async ({ serviceName, environment, actorRole }) => {
+  const context: Stage0Context = {
+    actor_role: actorRole,
+    environment,
+    approval_status: 'none', // Would come from your approval system
+  };
+
+  const response = await stage0.checkGoal(
+    `Deploy ${serviceName} to ${environment}`,
+    {
+      sideEffects: ['deploy'],
+      context,
+      successCriteria: ['Deployment succeeds'],
+    }
+  );
+
+  if (response.verdict !== 'ALLOW') {
+    return {
+      content: [{ 
+        type: 'text', 
+        text: `⛔ ${response.verdict}: ${response.reason}\n\nRequest ID: ${response.request_id}` 
+      }],
+    };
+  }
+
+  // Execute deployment
+  return executeDeployment(serviceName, environment);
 });
 ```
 
@@ -332,15 +412,26 @@ server.tool('my-tool', 'Description', schema, async (params) => {
 | Runaway retry loops | Loop thresholds enforced |
 | Post-hoc detection only | Prevention before execution |
 
-## Getting an API Key
+## Running Tests
 
-1. Visit [SignalPulse](https://signalpulse.org)
-2. Create an account
-3. Subscribe to a plan
-4. Generate an API key from [Dashboard > API Keys](https://signalpulse.org/dashboard/settings/api-keys)
-5. Add to `.env` file
+This repository includes comprehensive smoke tests:
 
-For full API documentation, see [signalpulse.org/docs](https://signalpulse.org/docs)
+```bash
+# Run all tests (uses simulated mode without API key)
+npm test
+
+# Run tests with real API
+STAGE0_API_KEY=your_api_key npm test
+
+# Run tests in watch mode
+npm run test:watch
+```
+
+Tests cover:
+- ALLOW/DENY/DEFER verdict scenarios
+- Context propagation (`actor_role`, `environment`, etc.)
+- Error handling and edge cases
+- Real API integration (when API key provided)
 
 ## Related Examples
 

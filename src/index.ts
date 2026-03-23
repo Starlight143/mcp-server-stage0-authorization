@@ -54,17 +54,34 @@ const guardedToolHandler = async (
 
   if (response.verdict === 'DEFER') {
     const questions = response.defer_questions || response.clarifying_questions || [];
+    const questionsText = questions.length > 0 
+      ? `Questions:\n${questions.map((q) => `- ${q}`).join('\n')}\n\n` 
+      : '';
     return {
       content: [
         {
           type: 'text' as const,
-          text: `⏸️ DEFERRED by Stage0\n\nReason: ${response.reason}\n\nQuestions:\n${questions.map((q) => `- ${q}`).join('\n')}\n\nRequest ID: ${response.request_id}\nPolicy Version: ${response.policy_version}`,
+          text: `⏸️ DEFERRED by Stage0\n\nReason: ${response.reason}\n\n${questionsText}Request ID: ${response.request_id}\nPolicy Version: ${response.policy_version}`,
         },
       ],
     };
   }
 
-  const result = await handler();
+  let result: string;
+  try {
+    result = await handler();
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `❌ ERROR during execution\n\nError: ${errorMsg}\n\nRequest ID: ${response.request_id}\nPolicy Version: ${response.policy_version}`,
+        },
+      ],
+    };
+  }
+
   return {
     content: [
       {
@@ -116,7 +133,8 @@ server.tool(
       `Publish content to ${channel}`,
       ['publish'],
       async () => {
-        return `Content published to ${channel}:\n\n${content.substring(0, 200)}...`;
+        const preview = content.length > 200 ? `${content.substring(0, 200)}...` : content;
+        return `Content published to ${channel}:\n\n${preview}`;
       },
       undefined,
       {
@@ -131,21 +149,27 @@ server.tool(
 
 server.tool(
   'deploy-changes',
-  'Deploy changes to production environment (HIGH RISK - typically DENIED)',
+  'Deploy changes to an environment. Context-aware: requires appropriate actor_role for production deployments.',
   {
     serviceName: z.string().describe('The service to deploy'),
     environment: z.enum(['staging', 'production']).describe('Target environment'),
     changes: z.string().describe('Description of changes'),
+    actorRole: z.enum(['admin', 'developer', 'viewer']).optional().describe('Role of the actor performing deployment'),
   },
-  async ({ serviceName, environment, changes }) => {
+  async ({ serviceName, environment, changes, actorRole }) => {
+    const context: Stage0Context = {
+      environment,
+      actor_role: actorRole || 'viewer',
+    };
+
     return guardedToolHandler(
       'deploy-changes',
       `Deploy ${serviceName} to ${environment}`,
       ['deploy'],
       async () => {
-        return `Deployment initiated:\n- Service: ${serviceName}\n- Environment: ${environment}\n- Changes: ${changes}`;
+        return `Deployment initiated:\n- Service: ${serviceName}\n- Environment: ${environment}\n- Changes: ${changes}\n- Actor Role: ${actorRole || 'viewer'}`;
       },
-      undefined,
+      context,
       {
         successCriteria: [
           'Deployment completes successfully',
@@ -157,11 +181,61 @@ server.tool(
 );
 
 server.tool(
+  'managed-deploy',
+  'Deploy with full authorization context. Demonstrates actor_role, approval_status, environment, and resource_scope usage.',
+  {
+    serviceName: z.string().describe('The service to deploy'),
+    environment: z.enum(['development', 'staging', 'production']).describe('Target environment'),
+    changes: z.string().describe('Description of changes'),
+    actorRole: z.enum(['admin', 'developer', 'viewer']).describe('Role of the actor (admin, developer, viewer)'),
+    approvalStatus: z.enum(['approved', 'pending', 'none']).describe('Approval status for this deployment'),
+    resourceScope: z.string().optional().describe('Resource scope (e.g., "team-a", "all", "service-x")'),
+  },
+  async ({ serviceName, environment, changes, actorRole, approvalStatus, resourceScope }) => {
+    const context: Stage0Context = {
+      actor_role: actorRole,
+      approval_status: approvalStatus,
+      environment,
+      resource_scope: resourceScope || 'all',
+    };
+
+    const constraints: string[] = [];
+    if (environment === 'production') {
+      constraints.push('production_deployment');
+      if (approvalStatus !== 'approved') {
+        constraints.push('approval_required');
+      }
+    }
+    if (actorRole === 'viewer') {
+      constraints.push('read_only_role');
+    }
+
+    return guardedToolHandler(
+      'managed-deploy',
+      `Deploy ${serviceName} to ${environment} as ${actorRole}`,
+      ['deploy'],
+      async () => {
+        return `Deployment Details:\n- Service: ${serviceName}\n- Environment: ${environment}\n- Changes: ${changes}\n- Actor Role: ${actorRole}\n- Approval Status: ${approvalStatus}\n- Resource Scope: ${resourceScope || 'all'}\n\nAuthorization Context Used:\n- actor_role: ${actorRole}\n- approval_status: ${approvalStatus}\n- environment: ${environment}\n- resource_scope: ${resourceScope || 'all'}`;
+      },
+      context,
+      {
+        successCriteria: [
+          'Deployment completes successfully',
+          'No unauthorized access to resources',
+        ],
+        constraints,
+        tools: ['shell', 'kubectl', 'terraform'],
+      }
+    );
+  }
+);
+
+server.tool(
   'retry-workflow',
   'Retry a failing workflow (MEDIUM RISK - may DEFER if loop threshold exceeded)',
   {
     workflowId: z.string().describe('The workflow ID to retry'),
-    retryCount: z.number().describe('Current retry count'),
+    retryCount: z.number().int().nonnegative().describe('Current retry count (must be >= 0)'),
   },
   async ({ workflowId, retryCount }) => {
     return guardedToolHandler(
@@ -195,7 +269,7 @@ server.tool(
     goal: z.string().describe('The goal/action to check'),
     sideEffects: z.array(z.string()).describe('List of side effects (e.g., "publish", "deploy", "loop")'),
     successCriteria: z.array(z.string()).optional().describe('List of success criteria'),
-    retryCount: z.number().optional().describe('Current retry count (for loop scenarios)'),
+    retryCount: z.number().int().nonnegative().optional().describe('Current retry count (for loop scenarios, must be >= 0)'),
   },
   async ({ goal, sideEffects, successCriteria, retryCount }) => {
     const response = await stage0.checkGoal(goal, { 
